@@ -1,0 +1,14 @@
+<Application x:Class="WorldcrossInfoDisplay.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Application.Resources>
+    <SolidColorBrush x:Key="WindowBackground" Color="#F4F6F8" />
+    <SolidColorBrush x:Key="PanelBackground" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#D6DCE1" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#147A68" />
+    <Style TargetType="Window"><Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="13"/><Setter Property="Background" Value="{StaticResource WindowBackground}"/><Setter Property="Foreground" Value="#20252B"/></Style>
+    <Style TargetType="Button"><Setter Property="MinHeight" Value="30"/><Setter Property="Padding" Value="10,4"/><Setter Property="Margin" Value="0,0,6,0"/></Style>
+    <Style TargetType="TextBox"><Setter Property="MinHeight" Value="28"/><Setter Property="Padding" Value="5,3"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
+    <Style TargetType="ComboBox"><Setter Property="MinHeight" Value="28"/><Setter Property="Padding" Value="4,2"/></Style>
+  </Application.Resources>
+</Application>
