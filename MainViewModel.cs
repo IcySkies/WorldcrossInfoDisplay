@@ -50,6 +50,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         StatusText = "Live monitor ready. Connect to OBS when you want to publish.";
     }
 
+    public async Task FindRelayAsync()
+    {
+        await _relay.FindRelayAsync();
+        RelayStatus = "Searching for a running API relay...";
+    }
+
     public async Task ToggleObsAsync()
     {
         try
@@ -99,16 +105,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
         await ApplyAsync();
     }
 
-    private void OnEnvelope(WorldcrossEventEnvelope envelope)
+    internal void OnEnvelope(WorldcrossEventEnvelope envelope)
     {
         EventStatus = $"Sequence {envelope.Sequence}: {envelope.Kind}";
         if (envelope.Worldcross is null) return;
-        if (envelope.Kind == WorldcrossEventKind.WorldcrossGameplay)
-        {
-            var signature = string.Join("|", envelope.Worldcross.Players.OrderBy(x => x.SteamId64, StringComparer.Ordinal).Select(x => $"{x.SteamId64}:{x.LastPlayScore.ToString(System.Globalization.CultureInfo.InvariantCulture)}"));
-            if (signature != _lastPlaySignature && envelope.Worldcross.Players.Any(x => x.LastPlayScore != 0)) Settings.PlayCount++;
-            _lastPlaySignature = signature;
-        }
+        // Finalized scores arrive in room snapshots after gameplay has ended.
+        var signature = string.Join("|", envelope.Worldcross.Players.OrderBy(x => x.SteamId64, StringComparer.Ordinal).Select(x => $"{x.SteamId64}:{x.LastPlayScore.ToString(System.Globalization.CultureInfo.InvariantCulture)}"));
+        if (signature != _lastPlaySignature && envelope.Worldcross.Players.Any(x => x.LastPlayScore != 0)) Settings.PlayCount++;
+        _lastPlaySignature = signature;
         _players = envelope.Worldcross.Players.Where(x => !string.IsNullOrWhiteSpace(x.SteamId64)).OrderByDescending(x => x.Score).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.SteamId64, StringComparer.Ordinal).ToList();
         RebuildRows(_players);
         ApplyPreview();

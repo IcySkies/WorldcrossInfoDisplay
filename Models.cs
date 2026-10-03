@@ -42,8 +42,8 @@ public sealed record RelayDiscovery
 {
     public int ProtocolVersion { get; init; }
     public string Host { get; init; } = "127.0.0.1";
+    public int GamePort { get; init; }
     public int SubscriberPort { get; init; }
-    public int ProcessId { get; init; }
 }
 
 public sealed class WorldcrossSettings

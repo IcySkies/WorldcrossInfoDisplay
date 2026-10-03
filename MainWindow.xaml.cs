@@ -9,6 +9,7 @@ public partial class MainWindow : Window
     public MainWindow() { InitializeComponent(); Closed += async (_, _) => await ViewModel.ShutdownAsync(); }
     private async void ConnectObs_Click(object sender, RoutedEventArgs e) => await ViewModel.ToggleObsAsync();
     private async void RefreshObs_Click(object sender, RoutedEventArgs e) => await ViewModel.RefreshObsSourcesAsync();
+    private async void FindRelay_Click(object sender, RoutedEventArgs e) => await ViewModel.FindRelayAsync();
     private async void ToggleVisibility_Click(object sender, RoutedEventArgs e) => await ViewModel.ToggleSelectedVisibilityAsync();
     private async void Apply_Click(object sender, RoutedEventArgs e) => await ViewModel.ApplyAsync();
     private async void TemplateChanged(object sender, RoutedEventArgs e) => await ViewModel.ApplyAsync();

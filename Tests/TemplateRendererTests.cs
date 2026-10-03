@@ -1,4 +1,9 @@
 using System;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Text.Json;
+using System.Threading.Tasks;
 using WorldcrossInfoDisplay;
 using Xunit;
 
@@ -6,6 +11,37 @@ namespace WorldcrossInfoDisplay.Tests;
 
 public sealed class TemplateRendererTests
 {
+    [Fact]
+    public async Task RelaySourceUsesDiscoveryWithoutRequiringProcessId()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wid-relay", Guid.NewGuid().ToString("N"));
+        var directory = Path.Combine(root, "AutoChartSwitchV2");
+        Directory.CreateDirectory(directory);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var subscriberPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+        await File.WriteAllTextAsync(Path.Combine(directory, "bridge-relay.json"), JsonSerializer.Serialize(new
+        {
+            protocolVersion = 1,
+            host = "127.0.0.1",
+            gamePort = 28745,
+            subscriberPort,
+            processId = int.MaxValue
+        }));
+
+        try
+        {
+            await using var source = new RelayEventSource(root, Path.Combine(root, "missing-relay.exe"));
+            await source.StartAsync();
+            using var subscriber = await listener.AcceptTcpClientAsync().WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.Equal(subscriberPort, source.Port);
+        }
+        finally
+        {
+            listener.Stop();
+            Directory.Delete(root, true);
+        }
+    }
     private static WorldcrossPlayer Player(string id, string name, decimal score, decimal last, string label = "") => new() { SteamId64 = id, Name = name, Score = score, LastPlayScore = last, Label = label };
 
     [Fact]

@@ -16,6 +16,7 @@ public interface IWorldcrossEventSource : IAsyncDisposable
     event EventHandler<WorldcrossEventEnvelope>? EventReceived;
     event EventHandler<string>? StatusChanged;
     Task StartAsync(CancellationToken cancellationToken = default);
+    Task FindRelayAsync();
     Task StopAsync();
 }
 
@@ -27,6 +28,7 @@ public sealed class RelayEventSource : IWorldcrossEventSource
     private readonly string _relayExecutable;
     private CancellationTokenSource? _stop;
     private Task? _loop;
+    private readonly SemaphoreSlim _wake = new(0, 1);
     private DateTimeOffset _lastLaunch = DateTimeOffset.MinValue;
     public bool IsListening { get; private set; }
     public int Port { get; private set; }
@@ -60,7 +62,7 @@ public sealed class RelayEventSource : IWorldcrossEventSource
                 {
                     LaunchRelayIfConfigured();
                     SetStatus(string.IsNullOrWhiteSpace(_gamePath) ? "Game path is not configured." : "Waiting for relay discovery.");
-                    await Task.Delay(1000, cancellationToken);
+                    await DelayOrWakeAsync(cancellationToken);
                     continue;
                 }
                 Port = discovery.SubscriberPort;
@@ -71,7 +73,7 @@ public sealed class RelayEventSource : IWorldcrossEventSource
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
             catch (Exception ex) { SetStatus($"Relay disconnected: {ex.Message}"); }
-            if (!cancellationToken.IsCancellationRequested) await Task.Delay(1000, cancellationToken);
+            if (!cancellationToken.IsCancellationRequested) await DelayOrWakeAsync(cancellationToken);
         }
         SetStatus("Stopped");
     }
@@ -97,17 +99,39 @@ public sealed class RelayEventSource : IWorldcrossEventSource
 
     private async Task<RelayDiscovery?> ReadDiscoveryAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_gamePath)) return null;
-        var path = Path.Combine(_gamePath, "AutoChartSwitchV2", "bridge-relay.json");
-        try
+        foreach (var path in GetDiscoveryPaths())
         {
-            await using var stream = File.OpenRead(path);
-            var value = await JsonSerializer.DeserializeAsync<RelayDiscovery>(stream, JsonOptions, cancellationToken);
-            if (value is null || value.ProtocolVersion != 1 || value.SubscriberPort is < 1 or > 65535 || value.ProcessId <= 0) return null;
-            try { _ = Process.GetProcessById(value.ProcessId); } catch { return null; }
-            return value;
+            try
+            {
+                await using var stream = File.OpenRead(path);
+                var value = await JsonSerializer.DeserializeAsync<RelayDiscovery>(stream, JsonOptions, cancellationToken);
+                if (value is not null &&
+                    value.ProtocolVersion == 1 &&
+                    value.GamePort == 28745 &&
+                    value.SubscriberPort is >= 1 and <= 65535 &&
+                    !string.IsNullOrWhiteSpace(value.Host))
+                    return value;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch { }
         }
-        catch { return null; }
+        return null;
+    }
+
+    private IEnumerable<string> GetDiscoveryPaths()
+    {
+        if (!string.IsNullOrWhiteSpace(_gamePath))
+            yield return Path.Combine(_gamePath, "AutoChartSwitchV2", "bridge-relay.json");
+        yield return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SVC-AS", "VividStasisGameInfoRelay", "bridge-relay.json");
+    }
+
+    public Task FindRelayAsync()
+    {
+        SetStatus("Searching for a running API relay...");
+        if (_wake.CurrentCount == 0) _wake.Release();
+        return Task.CompletedTask;
     }
 
     private void LaunchRelayIfConfigured()
@@ -130,8 +154,16 @@ public sealed class RelayEventSource : IWorldcrossEventSource
         _stop?.Cancel();
         if (_loop is not null) try { await _loop; } catch (OperationCanceledException) { }
         _stop?.Dispose(); _stop = null;
+        _wake.Dispose();
     }
     public async ValueTask DisposeAsync() => await StopAsync();
+    private async Task DelayOrWakeAsync(CancellationToken cancellationToken)
+    {
+        var delay = Task.Delay(1000, cancellationToken);
+        var signal = _wake.WaitAsync(cancellationToken);
+        await Task.WhenAny(delay, signal);
+        if (delay.IsCompletedSuccessfully) await delay;
+    }
     private static async Task<bool> ReadExactlyAsync(NetworkStream stream, byte[] buffer, CancellationToken token) { var offset = 0; while (offset < buffer.Length) { var count = await stream.ReadAsync(buffer.AsMemory(offset), token); if (count == 0) return false; offset += count; } return true; }
 
     private static JsonSerializerOptions CreateOptions()
